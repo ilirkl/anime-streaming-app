@@ -29,7 +29,7 @@ export function AppLayout({ children, user }: { children: React.ReactNode, user:
   const { theme } = useTheme();
   const systemTheme = useSystemTheme();
   const router = useRouter();
-  const { profile, isLoading } = useUserProfile();
+  const { profile } = useUserProfile(); // Remove isLoading from destructuring
   const [isAdmin, setIsAdmin] = useState(false);
   
   // Handle admin status after initial render
@@ -334,6 +334,7 @@ export function AppLayout({ children, user }: { children: React.ReactNode, user:
     </>
   );
 }
+
 
 
 

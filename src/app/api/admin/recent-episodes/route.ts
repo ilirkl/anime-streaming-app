@@ -32,12 +32,11 @@ export async function GET() {
 
     if (error) throw error;
 
-    // Transform the data after fetching
-    const formattedData = data.map(episode => ({
+    const formattedData = data?.map(episode => ({
       id: episode.id,
-      episode_number: episode.number,  // Just map the number field to episode_number
+      episode_number: episode.number,
       updated_at: episode.updated_at,
-      anime_title: episode.seasons.animes.title
+      anime_title: episode.seasons[0]?.animes[0]?.title || 'Unknown'
     }));
 
     return NextResponse.json(formattedData);
@@ -49,4 +48,7 @@ export async function GET() {
     );
   }
 }
+
+
+
 

@@ -20,16 +20,27 @@ import { AuthNotification } from "@/components/auth/AuthNotification";
 // Remove static import for webtorrent
 import Script from 'next/script'; // Import next/script
 
-// Webtor EmbedSDK script URL (always use the latest stable version from unpkg)
-// If you encounter a loading error, verify the file exists at this URL:
-// https://unpkg.com/@webtor/embed-sdk-js@latest/dist/index.min.js
-const WEBTOR_EMBED_SDK_URL = 'https://cdn.jsdelivr.net/npm/@webtor/embed-sdk-js@0.2.19/dist/index.min.js';
+// Define proper types for Webtor
+interface WebtorSDK {
+  push: (config: WebtorConfig) => void;
+}
 
-// Re-add global type declaration for EmbedSDK
+interface WebtorConfig {
+  id: string;
+  magnet: string;
+  width: string;
+  autoplay?: boolean;
+  features?: {
+    embed?: boolean;
+    settings?: boolean;
+    [key: string]: boolean | undefined;
+  };
+}
+
 declare global {
-    interface Window {
-        webtor: any; // Webtor EmbedSDK global
-    }
+  interface Window {
+    webtor: WebtorSDK;
+  }
 }
 
 // Helper function to truncate text
@@ -109,17 +120,16 @@ interface WatchPageClientProps {
     episodes: Episode[];
     currentEpisode: Episode | null;
     streamingLinks: StreamingLink[];
-    selectedLink: StreamingLink | null;
     error: string | null;
     animeId: string;
     animeName?: string; // Optional slug/name for the new URL structure
-    seasonNum: string;
-    episodeNum: string;
+    seasonNum?: string;
+    episodeNum?: string;
     isInWatchlist?: boolean; // Whether the anime is in the user's watchlist
     watchlistItemId?: string; // ID of the watchlist item if it exists
     topAnime?: Array<{ id: string; title: string; cover_image?: string | null }>; // Top 10 anime for the footer
     trendingAnime?: Array<{ id: string; title: string; cover_image?: string | null }>; // Trending anime for the footer
-    torrentId: string | null; // Remove the torrentId prop
+    torrentId?: string | null; // Add torrentId prop
 }
 
 export function WatchPageClient({
@@ -129,24 +139,19 @@ export function WatchPageClient({
     episodes,
     currentEpisode,
     streamingLinks,
-    selectedLink,
     error,
     animeId,
     animeName,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    seasonNum,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    episodeNum,
     isInWatchlist: initialIsInWatchlist = false,
     watchlistItemId: initialWatchlistItemId,
     topAnime = [],
     trendingAnime = [],
-    // torrentId, // Remove torrentId prop
 }: WatchPageClientProps) {
     const router = useRouter();
     const [showEpisodeList, setShowEpisodeList] = useState(false);
     const [showAnimeInfo, setShowAnimeInfo] = useState(false);
     const [isInWatchlist, setIsInWatchlist] = useState(initialIsInWatchlist);
+    const [watchlistItemId, setWatchlistItemId] = useState(initialWatchlistItemId);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const playerRef = useRef<HTMLDivElement>(null); // Ref for the player container
     const [magnetLink, setMagnetLink] = useState<string | null>(null);
@@ -231,20 +236,24 @@ export function WatchPageClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [showEpisodeList, currentEpisode?.id]);
 
-    // Function to check if anime is in watchlist
-    const [watchlistItemId, setWatchlistItemId] = useState<string | undefined>(initialWatchlistItemId);
+    // Check watchlist status when authentication state changes or animeDetails changes
+    useEffect(() => {
+        if (isAuthenticated && animeDetails?.id) {
+            checkWatchlist();
+        }
+    }, [isAuthenticated, animeDetails?.id]);
 
-    // Keep checkWatchlist as it's independent of the player
     const checkWatchlist = async () => {
-        // If we already have the watchlist status from the server, don't check again
-        if (initialIsInWatchlist && initialWatchlistItemId) return;
-        if (!animeDetails || !isAuthenticated) return;
+        if (!animeDetails) {
+            setIsInWatchlist(false);
+            setWatchlistItemId(undefined);
+            return;
+        }
 
         try {
             const supabase = createClient();
             const { data, error: sessionError } = await supabase.auth.getSession();
 
-            // Silently handle session errors
             if (sessionError || !data || !data.session || !data.session.user) {
                 setIsInWatchlist(false);
                 setWatchlistItemId(undefined);
@@ -258,7 +267,6 @@ export function WatchPageClient({
                 .eq('anime_id', animeDetails.id)
                 .maybeSingle();
 
-            // Silently handle watchlist errors
             if (watchlistError) {
                 setIsInWatchlist(false);
                 setWatchlistItemId(undefined);
@@ -273,7 +281,6 @@ export function WatchPageClient({
                 setWatchlistItemId(undefined);
             }
         } catch {
-            // Silently handle any errors
             setIsInWatchlist(false);
             setWatchlistItemId(undefined);
         }
@@ -308,22 +315,20 @@ export function WatchPageClient({
 
     // Initialize player using next/script and polling
     useEffect(() => {
-        let player: any = null;
-        let client: any = null;
         let pollIntervalId: NodeJS.Timeout | null = null;
-        let pollTimeoutId: NodeJS.Timeout | null = null;
+        const pollTimeoutId: NodeJS.Timeout | null = null; // Changed to const since it's never reassigned
 
-        const initializePlayerWithPolling = async () => { // Make this async
+        const initializePlayerWithPolling = async () => {
             console.log('Starting polling for EmbedSDK...');
             let attempts = 0;
-            const maxAttempts = 20; // Poll for ~10 seconds
-            const pollFrequency = 500; // ms
+            const maxAttempts = 20;
+            const pollFrequency = 500;
 
-            pollIntervalId = setInterval(async () => { // Make callback async
+            pollIntervalId = setInterval(async () => {
                 attempts++;
                 console.log(`Polling for EmbedSDK attempt ${attempts}...`);
-                let WebtorSDK: any = null;
-                // Check window directly since the script is loaded globally
+                let WebtorSDK: WebtorSDK | null = null;
+                
                 if (typeof window.webtor === 'object' || typeof window.webtor === 'function') {
                     WebtorSDK = window.webtor;
                 }
@@ -333,53 +338,38 @@ export function WatchPageClient({
                     if (pollIntervalId) clearInterval(pollIntervalId);
                     if (pollTimeoutId) clearTimeout(pollTimeoutId);
 
-                    // Proceed with initialization
                     if (!playerRef.current || !magnetLink) {
-                         console.error("Cannot initialize player: Missing playerRef or magnetLink at time of SDK discovery.");
-                         return;
+                        console.error("Cannot initialize player: Missing playerRef or magnetLink at time of SDK discovery.");
+                        return;
                     }
+                    
                     try {
-
                         console.log('Initializing Webtor embed...');
                         console.log('Initializing Webtor embed with magnet:', magnetLink);
                         window.webtor.push({
-                          id: 'webtor-player',
-                          magnet: magnetLink,
-                          autoplay: true,
-                          width: '100%',  // Request 100% width from SDK
-                          // height: '100%', // Let the container div control height via CSS
-                          // Configure features based on the documentation
-                          features: {
-                            embed: false, // Hide the embed button specifically
-                            // Keep other features enabled by default unless specified otherwise
-                            // settings: true, // Example: Keep settings enabled (default)
-                            // ...
-                          },
+                            id: 'webtor-player',
+                            magnet: magnetLink,
+                            width: '100%',
+                            autoplay: true,
+                            features: {
+                                embed: false,
+                            },
                         });
                         console.log('Webtor player initialization command pushed.');
-                    } catch (e: unknown) { // Catch unknown type
-                        console.error('Error pushing command to Webtor SDK:', e);
-                        if (e instanceof Error) {
-                            console.error('Error name:', e.name);
-                            console.error('Error message:', e.message);
-                            console.error('Error stack:', e.stack);
+                    } catch (error) {
+                        console.error('Error pushing command to Webtor SDK:', error);
+                        if (error instanceof Error) {
+                            console.error('Error name:', error.name);
+                            console.error('Error message:', error.message);
+                            console.error('Error stack:', error.stack);
                         }
                     }
-
                 } else if (attempts >= maxAttempts) {
                     console.error('EmbedSDK polling timed out. Could not find constructor.');
                     if (pollIntervalId) clearInterval(pollIntervalId);
                     if (pollTimeoutId) clearTimeout(pollTimeoutId);
                 }
             }, pollFrequency);
-
-            // Set a timeout for the polling process
-            pollTimeoutId = setTimeout(() => {
-                if (pollIntervalId) {
-                    console.error('EmbedSDK polling reached absolute timeout.');
-                    clearInterval(pollIntervalId);
-                }
-            }, maxAttempts * pollFrequency + 1000); // Add a buffer
         };
 
         // Start initialization process if magnetLink exists and script is loaded/loading
@@ -400,15 +390,9 @@ export function WatchPageClient({
             if (pollIntervalId) clearInterval(pollIntervalId);
             if (pollTimeoutId) clearTimeout(pollTimeoutId);
 
-            // TODO: Implement proper cleanup if the SDK provides instance handles or methods
-            // The previous cleanup logic using unassigned 'player' and 'client' was incorrect.
-            // We need to know how the SDK provides access to the created instance for cleanup.
             const playerElement = document.getElementById('webtor-player');
             if (playerElement) {
-                 // Basic cleanup attempt: remove the iframe/element content if possible
-                 // This might not be sufficient to stop background processes.
-                 // playerElement.innerHTML = '';
-                 // console.log('Attempted basic cleanup of player container.');
+                playerElement.innerHTML = '';
             }
         };
     }, [magnetLink, isEmbedSdkLoaded]); // Depend on magnetLink and script load status

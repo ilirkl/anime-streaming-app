@@ -6,27 +6,16 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2 } from 'lucide-react';
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface StatusMessage {
   message: string;
   type: 'success' | 'error' | '';
 }
 
-interface Episode {
-  number: number;
-  title: string;
-  title_japanese?: string;
-  aired?: string;
-}
-
 export function UpdateAnimeForm() {
   const [malId, setMalId] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState<StatusMessage>({ message: '', type: '' });
-  const [latestEpisodes, setLatestEpisodes] = useState<Episode[]>([]);
 
   const fetchEpisodesFromJikan = async (malId: string) => {
     try {
@@ -57,7 +46,8 @@ export function UpdateAnimeForm() {
     
     setIsLoading(true);
     setStatus({ message: '', type: '' });
-    setLatestEpisodes([]);
+    // Remove unused setState call
+    // setLatestEpisodes([]);
 
     try {
       const data = await fetchEpisodesFromJikan(malId);
@@ -116,4 +106,6 @@ export function UpdateAnimeForm() {
     </Card>
   );
 }
+
+
 

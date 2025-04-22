@@ -17,17 +17,10 @@ export default async function WatchPage({
 }: {
     params: Promise<WatchPageParams>
 }) {
-    // Await the params first
     const resolvedParams = await params;
-
-    // Get the user without requiring authentication
-    // This allows non-authenticated users to view content
     const user = await getUser();
-
-    // Create the Supabase client - our updated createClient handles errors gracefully
     const supabase = await createClient();
 
-    // Remove 's' and 'e' prefixes if present
     const seasonNum = parseInt(resolvedParams.seasonNum.replace('s', ''), 10);
     const episodeNum = parseInt(resolvedParams.episodeNum.replace('e', ''), 10);
 
@@ -45,7 +38,7 @@ export default async function WatchPage({
         notFound();
     }
 
-    // Check if the anime is in the user's watchlist (only for authenticated users)
+    // Check if the anime is in the user's watchlist
     let isInWatchlist = false;
     let watchlistItemId: string | undefined;
 
@@ -67,18 +60,16 @@ export default async function WatchPage({
         }
     }
 
-    // Fetch top 10 and trending anime for the footer
     const topAnime = await animeServer.getTopAnime(10);
     const { data: trendingAnime } = await animeServer.getTrendingAnime(6);
 
-    // Extract the torrent ID (magnet link) from the selected link
-    const torrentId = data.selectedLink?.url || null; // Use null if no link found
+    // Get the torrent ID from the selected link
+    const torrentId = data.selectedLink?.url || null;
 
     return (
         <Suspense fallback={<WatchPageSkeleton />}>
             <WatchPageClient
                 {...data}
-                torrentId={torrentId} // Pass the torrentId down
                 animeId={data.animeDetails.id}
                 animeName={resolvedParams.animeName}
                 seasonNum={resolvedParams.seasonNum}
@@ -87,7 +78,9 @@ export default async function WatchPage({
                 watchlistItemId={watchlistItemId}
                 topAnime={topAnime}
                 trendingAnime={trendingAnime}
+                torrentId={torrentId}
             />
         </Suspense>
     );
 }
+

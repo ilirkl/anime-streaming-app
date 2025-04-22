@@ -48,6 +48,7 @@ interface JikanEpisode {
   title: string;
   title_english: string | null; // Add English title
   title_japanese: string | null;
+  title_romaji: string | null;  // Correct spelling
   aired: string | null;
   filler: boolean;
   recap: boolean;
@@ -162,7 +163,7 @@ async function fetchAnimeEpisodes(malId: number): Promise<JikanEpisode[]> {
       }
 
       // Log each episode we find
-      data.data.forEach((episode: JikanEpisode, index: number) => {
+      data.data.forEach((episode: JikanEpisode) => {
         console.log(`Found Episode ${episode.mal_id}: ${episode.title}`);
         if (episode.title_japanese) {
           console.log(`Japanese title: ${episode.title_japanese}`);
@@ -364,8 +365,11 @@ async function addNewAnime(malId: number) {
       console.log(`Parsed runtime: ${runtime} minutes from "${anime.duration}"`);
 
       const episodes = episodesData.map((episode, index) => {
-        // Use title_romanji as primary, fallback to title or episode number
-        const episodeTitle = episode.title_romanji || episode.title || `Episode ${index + 1}`;
+        // Use romaji title as primary, fallback to other titles or episode number
+        const episodeTitle = episode.title_romaji || 
+                            episode.title_english || 
+                            episode.title || 
+                            `Episode ${index + 1}`;
         return {
           season_id: seasonData.id,
           title: episodeTitle,
@@ -405,7 +409,7 @@ async function addNewAnime(malId: number) {
   }
 }
 
-export async function updateAnimeEpisodes(malId: number) {
+async function updateAnimeEpisodes(malId: number) {
   try {
     console.log('Fetching latest episodes...');
     const jikanAnime = await fetchAnimeById(malId);
@@ -485,11 +489,11 @@ export async function updateAnimeEpisodes(malId: number) {
     // Only process episodes that are newer than what we have in the database
     for (const episode of latestEpisodes) {
       if (episode.mal_id > lastEpisodeInDb) {
-        // Use title_romanji as primary, fallback to other titles or episode number
-        const episodeTitle = episode.title_romanji || 
-                           episode.title_english || 
-                           episode.title_japanese || 
-                           `Episode ${episode.mal_id}`;
+        const episodeTitle = episode.title_romaji || 
+                            episode.title_english || 
+                            episode.title || 
+                            episode.title_japanese || 
+                            `Episode ${episode.mal_id}`;
         
         console.log(`Adding new episode: ${episodeTitle}`);
         
@@ -538,6 +542,10 @@ export async function updateAnimeEpisodes(malId: number) {
 }
 
 export { updateAnimeEpisodes, addNewAnime };
+
+
+
+
 
 
 
