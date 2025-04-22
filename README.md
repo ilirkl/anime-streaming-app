@@ -12,6 +12,41 @@ A modern web application for streaming and discovering anime, built with Next.js
 - **Search Functionality**: Quick access to content with search shortcuts
 - **Dark/Light Theme**: System-based and manual theme switching
 
+## 🎬 Streaming Technology
+
+### WebTor Integration
+
+The application uses WebTor for seamless torrent streaming directly in the browser:
+
+- **Browser-Based Streaming**: Stream torrent content without external software
+- **Real-Time Playback**: Start watching before the download completes
+- **Efficient Resource Usage**: Optimized memory and bandwidth consumption
+- **Secure Implementation**: Client-side only, no server storage of content
+- **Progress Tracking**: Real-time download status and peer information
+- **Format Support**: Compatible with most video formats (MP4, MKV, WebM)
+
+### Technical Implementation
+
+```typescript
+// WebTor initialization
+window.webtor.push({
+    id: 'webtor-player',
+    magnet: magnetLink,
+    width: '100%',
+    features: {
+        embed: false,
+        settings: true
+    }
+});
+```
+
+### Security Considerations
+
+- Content is streamed directly in the browser
+- No permanent storage of streamed content
+- CSP headers configured for secure operation
+- Client-side only implementation
+
 ## 👑 Admin Features
 
 Administrators have access to a dedicated dashboard with powerful content management capabilities:
