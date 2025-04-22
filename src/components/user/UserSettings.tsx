@@ -22,6 +22,7 @@ interface UserProfile {
   username: string;
   avatar_url: string;
   email: string;
+  role?: 'user' | 'admin';
 }
 
 export function UserSettings({ userId }: UserSettingsProps) {

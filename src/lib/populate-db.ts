@@ -125,12 +125,83 @@ async function fetchAnimeById(malId: number): Promise<JikanAnime> {
 
 async function fetchAnimeEpisodes(malId: number): Promise<JikanEpisode[]> {
   try {
-    // Respect Jikan's rate limiting - wait longer to avoid rate limits
-    await new Promise(resolve => setTimeout(resolve, 4000));
+    let allEpisodes: JikanEpisode[] = [];
+    let page = 1;
+    let hasMorePages = true;
 
-    console.log(`Fetching episodes data for MAL ID: ${malId}`);
+    while (hasMorePages) {
+      // Respect Jikan's rate limiting
+      await new Promise(resolve => setTimeout(resolve, 4000));
+
+      // Using the episodes endpoint specifically
+      const response = await fetch(`https://api.jikan.moe/v4/anime/${malId}/episodes?page=${page}`);
+      
+      console.log(`Fetching episodes for MAL ID: ${malId} - Page ${page}`);
+      console.log(`Response status: ${response.status}`);
+      
+      if (!response.ok) {
+        const responseText = await response.text();
+        console.error(`Error response body:`, responseText);
+        
+        if (response.status === 404) {
+          throw new Error(`Anime with ID ${malId} not found on MyAnimeList`);
+        }
+        if (response.status === 429) {
+          console.log('Rate limit hit, waiting 5 seconds before retry...');
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          continue;
+        }
+        throw new Error(`MyAnimeList API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.data || !Array.isArray(data.data)) {
+        console.error('Unexpected API response structure:', data);
+        throw new Error('Invalid API response format');
+      }
+
+      // Log each episode we find
+      data.data.forEach((episode: JikanEpisode, index: number) => {
+        console.log(`Found Episode ${episode.mal_id}: ${episode.title}`);
+        if (episode.title_japanese) {
+          console.log(`Japanese title: ${episode.title_japanese}`);
+        }
+      });
+
+      allEpisodes = [...allEpisodes, ...data.data];
+      
+      // Check pagination info
+      hasMorePages = data.pagination?.has_next_page === true;
+      page++;
+
+      // Add delay between pages if there are more
+      if (hasMorePages) {
+        await new Promise(resolve => setTimeout(resolve, 4000));
+      }
+    }
+
+    console.log(`Total episodes found: ${allEpisodes.length}`);
+    allEpisodes.forEach((ep, index) => {
+      console.log(`Episode ${index + 1}:`);
+      console.log(`- Title: ${ep.title}`);
+      console.log(`- Japanese Title: ${ep.title_japanese || 'N/A'}`);
+      console.log(`- Air Date: ${ep.aired || 'N/A'}`);
+      console.log('---');
+    });
+
+    return allEpisodes;
+  } catch (error) {
+    console.error('Error in fetchAnimeEpisodes:', error);
+    throw error;
+  }
+}
+
+async function fetchLatestEpisodes(malId: number): Promise<JikanEpisode[]> {
+  try {
+    // Start from the last page to get latest episodes
     const response = await fetch(`https://api.jikan.moe/v4/anime/${malId}/episodes`);
-
+    
     if (!response.ok) {
       if (response.status === 404) {
         throw new Error(`Anime with ID ${malId} not found on MyAnimeList`);
@@ -141,34 +212,44 @@ async function fetchAnimeEpisodes(malId: number): Promise<JikanEpisode[]> {
       throw new Error(`MyAnimeList API error: ${response.status}`);
     }
 
-    // Check content type to ensure we're getting JSON
-    const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-      throw new Error(`Expected JSON response but got ${contentType}`);
+    const data = await response.json();
+    
+    // Validate the response structure
+    if (!data?.pagination?.items?.total) {
+      console.log('No episodes found or invalid response structure:', data);
+      return [];
     }
 
-    const text = await response.text();
-    let data;
-
-    try {
-      data = JSON.parse(text);
-    } catch (error) {
-      const parseError = error as Error;
-      console.error('Failed to parse JSON response:', text.substring(0, 200) + '...');
-      throw new Error(`Invalid JSON response from API: ${parseError.message}`);
+    const totalEpisodes = data.pagination.items.total;
+    const perPage = data.pagination.items.per_page || 100; // Default to 100 if not specified
+    const lastPage = Math.ceil(totalEpisodes / perPage);
+    
+    // If there are no episodes, return empty array
+    if (totalEpisodes === 0) {
+      return [];
     }
-
-    if (!data || !data.data) {
-      throw new Error('Invalid response from MyAnimeList API: missing data property');
+    
+    // Respect Jikan's rate limiting
+    await new Promise(resolve => setTimeout(resolve, 4000));
+    
+    // Fetch the last page
+    const lastPageResponse = await fetch(`https://api.jikan.moe/v4/anime/${malId}/episodes?page=${lastPage}`);
+    
+    if (!lastPageResponse.ok) {
+      throw new Error(`Failed to fetch last page: ${lastPageResponse.status}`);
     }
-
-    return data.data;
+    
+    const lastPageData = await lastPageResponse.json();
+    
+    if (!Array.isArray(lastPageData?.data)) {
+      console.log('Invalid last page data structure:', lastPageData);
+      return [];
+    }
+    
+    return lastPageData.data;
   } catch (error) {
-    console.error('Error in fetchAnimeEpisodes:', error);
-    if (error instanceof Error) {
-      throw error;
-    }
-    throw new Error('Failed to fetch anime episodes data from MyAnimeList');
+    console.error('Error in fetchLatestEpisodes:', error);
+    throw error;
   }
 }
 
@@ -283,14 +364,15 @@ async function addNewAnime(malId: number) {
       console.log(`Parsed runtime: ${runtime} minutes from "${anime.duration}"`);
 
       const episodes = episodesData.map((episode, index) => {
-        const episodeTitle = episode.title_english || episode.title_japanese || `Episode ${index + 1}`;
+        // Use title_romanji as primary, fallback to title or episode number
+        const episodeTitle = episode.title_romanji || episode.title || `Episode ${index + 1}`;
         return {
           season_id: seasonData.id,
           title: episodeTitle,
           number: index + 1,
-          synopsis: `Episode ${index + 1} of ${displayTitle}`, // Use the English title if available
+          synopsis: episode.synopsis || `Episode ${index + 1} of ${displayTitle}`,
           duration: runtime,
-          air_date: new Date(anime.aired.from)
+          air_date: episode.aired ? new Date(episode.aired) : new Date(anime.aired.from)
         };
       });
 
@@ -323,33 +405,40 @@ async function addNewAnime(malId: number) {
   }
 }
 
-async function updateAnimeEpisodes(animeId: string, malId: number) {
+export async function updateAnimeEpisodes(malId: number) {
   try {
     console.log('Fetching latest episodes...');
     const jikanAnime = await fetchAnimeById(malId);
-    const episodesData = await fetchAnimeEpisodes(malId);
+    const latestEpisodes = await fetchLatestEpisodes(malId);
 
-    // Determine the title to use (English if available, otherwise primary)
-    const displayTitle = jikanAnime.title_english || jikanAnime.title;
-
-    // Get existing seasons for this anime
-    // We need to use let for existingSeasons because it might be reassigned later
-    // eslint-disable-next-line prefer-const
-    let { data: existingSeasons, error: seasonsError } = await supabase
-      .from('seasons')
-      .select('*')
-      .eq('anime_id', animeId)
-      .order('number');
-
-    if (seasonsError) {
-      throw new Error(`Error fetching existing seasons: ${seasonsError.message}`);
+    if (latestEpisodes.length === 0) {
+      return {
+        success: true,
+        message: 'No episodes available for this anime',
+        newEpisodesCount: 0
+      };
     }
 
-    // Update anime details first
-    const { error: animeError } = await supabase
+    console.log(`Found ${latestEpisodes.length} episodes on the last page`);
+    
+    const { data: anime, error: animeError } = await supabase
+      .from('animes')
+      .select('id')
+      .eq('mal_id', malId)
+      .single();
+
+    if (animeError || !anime) {
+      throw new Error(`Anime with MAL ID ${malId} not found`);
+    }
+
+    const animeId = anime.id;
+    const displayTitle = jikanAnime.title_english || jikanAnime.title;
+
+    // Update anime details
+    await supabase
       .from('animes')
       .update({
-        title: displayTitle, // Use the English title if available
+        title: displayTitle,
         synopsis: jikanAnime.synopsis,
         status: mapJikanStatusToAnimeStatus(jikanAnime.status),
         end_date: jikanAnime.aired.to,
@@ -358,13 +447,15 @@ async function updateAnimeEpisodes(animeId: string, malId: number) {
       })
       .eq('id', animeId);
 
-    if (animeError) {
-      throw new Error(`Error updating anime: ${animeError.message}`);
-    }
+    // Get existing season
+    let { data: existingSeasons } = await supabase
+      .from('seasons')
+      .select('*')
+      .eq('anime_id', animeId)
+      .order('number');
 
-    // If no seasons exist, create season 1
-    if (!existingSeasons || existingSeasons.length === 0) {
-      const { data: newSeason, error: seasonError } = await supabase
+    if (!existingSeasons?.length) {
+      const { data: newSeason } = await supabase
         .from('seasons')
         .insert({
           anime_id: animeId,
@@ -374,46 +465,46 @@ async function updateAnimeEpisodes(animeId: string, malId: number) {
         .select()
         .single();
 
-      if (seasonError) {
-        throw new Error(`Error creating season: ${seasonError.message}`);
-      }
-
       existingSeasons = [newSeason];
     }
 
-    // Get existing episodes for the first season
-    const { data: existingEpisodes, error: episodesError } = await supabase
+    // Get the latest episode number from the database
+    const { data: latestDbEpisode } = await supabase
       .from('episodes')
       .select('number')
       .eq('season_id', existingSeasons[0].id)
-      .order('number');
+      .order('number', { ascending: false })
+      .limit(1);
 
-    if (episodesError) {
-      throw new Error(`Error fetching existing episodes: ${episodesError.message}`);
-    }
-
-    const existingEpisodeNumbers = new Set(existingEpisodes?.map(ep => ep.number) || []);
+    const lastEpisodeInDb = latestDbEpisode?.[0]?.number || 0;
     const newEpisodes = [];
 
-    // Parse the runtime from the duration string
+    // Parse the runtime
     const runtime = parseAnimeRuntime(jikanAnime.duration);
-    console.log(`Parsed runtime: ${runtime} minutes from "${jikanAnime.duration}"`);
 
-    // Calculate new episodes to add
-    for (let i = 1; i <= episodesData.length; i++) {
-      if (!existingEpisodeNumbers.has(i)) {
-        const episodeData = episodesData.find(ep => ep.mal_id === i);
-        const episodeTitle = episodeData?.title_english || episodeData?.title_japanese || `Episode ${i}`;
+    // Only process episodes that are newer than what we have in the database
+    for (const episode of latestEpisodes) {
+      if (episode.mal_id > lastEpisodeInDb) {
+        // Use title_romanji as primary, fallback to other titles or episode number
+        const episodeTitle = episode.title_romanji || 
+                           episode.title_english || 
+                           episode.title_japanese || 
+                           `Episode ${episode.mal_id}`;
+        
+        console.log(`Adding new episode: ${episodeTitle}`);
+        
         newEpisodes.push({
           season_id: existingSeasons[0].id,
           title: episodeTitle,
-          number: i,
-          synopsis: `Episode ${i} of ${displayTitle}`, // Use the English title if available
+          number: episode.mal_id,
+          synopsis: episode.synopsis || `Episode ${episode.mal_id} of ${displayTitle}`,
           duration: runtime,
-          air_date: new Date(jikanAnime.aired.from)
+          air_date: episode.aired ? new Date(episode.aired) : new Date(jikanAnime.aired.from)
         });
       }
     }
+
+    console.log(`Found ${newEpisodes.length} new episodes to add`);
 
     if (newEpisodes.length > 0) {
       const { error: insertError } = await supabase
@@ -424,7 +515,8 @@ async function updateAnimeEpisodes(animeId: string, malId: number) {
         throw new Error(`Error inserting new episodes: ${insertError.message}`);
       }
 
-      console.log(`Added ${newEpisodes.length} new episodes`);
+      console.log(`Successfully added ${newEpisodes.length} new episodes:`);
+      newEpisodes.forEach(ep => console.log(`- ${ep.title}`));
     } else {
       console.log('No new episodes to add');
     }
@@ -446,3 +538,15 @@ async function updateAnimeEpisodes(animeId: string, malId: number) {
 }
 
 export { updateAnimeEpisodes, addNewAnime };
+
+
+
+
+
+
+
+
+
+
+
+

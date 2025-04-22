@@ -4,7 +4,7 @@ import { getUser } from '@/lib/server';
 
 export async function POST(request: NextRequest) {
   try {
-    // Check if user is authenticated and is an admin
+    // Check if user is authenticated
     const user = await getUser();
     
     if (!user) {
@@ -14,18 +14,8 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // In a real app, you would check if the user has admin privileges
-    // For now, we'll allow any authenticated user to update anime
-    
     // Parse the request body
     const body = await request.json();
-    
-    if (!body.animeId || typeof body.animeId !== 'string') {
-      return NextResponse.json(
-        { success: false, message: 'Invalid request: animeId must be a string' },
-        { status: 400 }
-      );
-    }
     
     if (!body.malId || typeof body.malId !== 'number') {
       return NextResponse.json(
@@ -33,9 +23,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    
-    // Update the anime episodes
-    const result = await updateAnimeEpisodes(body.animeId, body.malId);
+
+    // Update the anime episodes using just the MAL ID
+    const result = await updateAnimeEpisodes(body.malId);
     
     if (result.success) {
       return NextResponse.json(result);
@@ -57,3 +47,5 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+
