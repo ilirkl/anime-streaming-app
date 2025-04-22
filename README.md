@@ -359,11 +359,11 @@ Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md)
 ## 📸 Screenshots
 
 ### User Dashboard
-![User Dashboard](https://imgur.com/a/WAX8rSU)
+![User Dashboard]. (https://imgur.com/a/WAX8rSU)
 *Main dashboard featuring trending anime, latest episodes, and genre-based navigation*
 
 ### Admin Dashboard
-![Admin Dashboard](https://imgur.com/a/MHUiKp6)
+![Admin Dashboard] (https://imgur.com/a/MHUiKp6)
 *Admin interface for managing anime content and monitoring recent updates*
 
 
