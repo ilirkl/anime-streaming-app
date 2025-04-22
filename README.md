@@ -1,6 +1,6 @@
 # Anime Streaming App
 
-A modern web application for streaming and discovering anime, built with Next.js 15, TypeScript, Supabase, and Tailwind CSS.
+A modern web application for streaming and discovering anime, built with Next.js 15, TypeScript, Supabase, JikanAPI , Webtor and Tailwind CSS.
 
 ## 🌟 Features
 
