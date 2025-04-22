@@ -356,6 +356,16 @@ The application is optimized for deployment on [Vercel](https://vercel.com). Fol
 
 Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
 
+## 📸 Screenshots
+
+### User Dashboard
+![User Dashboard](https://imgur.com/a/WAX8rSU)
+*Main dashboard featuring trending anime, latest episodes, and genre-based navigation*
+
+### Admin Dashboard
+![Admin Dashboard](https://imgur.com/a/MHUiKp6)
+*Admin interface for managing anime content and monitoring recent updates*
+
 
 
 
